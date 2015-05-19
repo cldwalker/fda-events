@@ -1,5 +1,6 @@
 (ns fda-events.core
-  (:require [clojure.browser.repl :as repl]
+  (:require #_[clojure.browser.repl :as repl]
+            [clojure.string :as cstr]
             [rum]
             [sablono.core :as sablono]
             [goog.net.XhrIo :as xhr]))
@@ -10,13 +11,18 @@
 
 (def app-state (atom {:query ""}))
 
-(defn submit-query [app event]
-  (swap! app assoc :message "Submitted!")
-  (xhr/send (str "https://api.fda.gov/drug/event.json?search=" (:query @app))
+(defn fetch-query! [app query-map]
+  (swap! app assoc :message (str "Submitted: " query-map))
+  (let [url (str "https://api.fda.gov/drug/event.json?"
+                 (cstr/join "&" (map (fn [[k v]] (str (name k) "=" v)) query-map)))]
+    (xhr/send url
             (fn [xhr-event]
               (let [response (js/JSON.parse (.getResponseText (.-target xhr-event)))]
-                (.log js/console "Response:" response)
-                (swap! app assoc :result (get (js->clj response) "results")))))
+                (.log js/console (str "Response for " url ":") response)
+                (swap! app assoc :result (js->clj response)))))))
+
+(defn submit-query [app event]
+  (fetch-query! app {:search (:query @app)})
   (.preventDefault event))
 
 (rum/defc input < rum/cursored rum/cursored-watch [ref attributes]
@@ -37,11 +43,20 @@
         {:href "#" :onClick #(submit-query app %)}
         "Search"]]]]]])
 
-(defn render-node [value]
+(defn count-query [app tree-location event]
+  (fetch-query! app {:search (:query @app) :count (cstr/join "." (conj tree-location "exact"))})
+  (.preventDefault event))
+
+(defn query-this-value [app tree-location value event]
+  (swap! app assoc :query (str (:query @app) " AND " (cstr/join "." tree-location) ":" value))
+  (fetch-query! app {:search (:query @app)})
+  (.preventDefault event))
+
+(defn render-node [app value tree-location]
   (cond
    (and (vector? value) (every? map? value))
     (map-indexed #(apply js/TreeView #js {:nodeLabel (str "Array " %1)}
-                         (render-node %2))
+                         (render-node app %2 tree-location))
                  value)
 
    (vector? value)
@@ -50,8 +65,13 @@
    (map? value)
    (map (fn [[k v]]
            (if (or (map? v) (vector? v))
-             (apply js/TreeView #js {:nodeLabel (name k) :defaultCollapsed true} (render-node v))
-             (sablono/html [:div (str (name k) ": " (pr-str v))])))
+             (apply js/TreeView #js {:nodeLabel (name k) :defaultCollapsed true} (render-node app v (conj tree-location k)))
+             (sablono/html (apply vector :div [:span (str (name k) ": " (pr-str v))]
+                                  [" ["
+                                   [:a {:href "#" :onClick #(count-query app (conj tree-location k) %)} "Counts"]
+                                   " | "
+                                   [:a {:href "#" :onClick #(query-this-value app (conj tree-location k) v %)} "Query this value"]
+                                   "]"]))))
          value)
 
     :else
@@ -65,7 +85,9 @@
        [:div.alert-box.radius.small-6.columns {:data-alert true} message])
      (query-form app)
      (when result
-       [:pre.panel.radius (render-node result)])]))
+       [:pre.panel.radius
+        [:div (str "Count: " (get-in result ["meta" "results" "total"]))]
+        (render-node app (get result "results") [])])]))
 
 (rum/mount (fda-event-app app-state) (.getElementById js/document "app"))
 
