@@ -25,13 +25,13 @@
                              :on-change #(reset! ref (.. % -target -value))})])
 
 (rum/defc query-form [app]
-  [:form
+  [:form {:onSubmit #(submit-query app %)}
    [:.row
     [:.small-8
      [:.row
       [:.small-9.columns
        (input (rum/cursor app [:query])
-              {:type "text" :id "query" :placeholder "Query" :className "radius"})]
+              {:type "text" :id "query" :placeholder "Query" :className "radius" :autoFocus true})]
       [:.small-3.columns
        [:a.button.small.radius
         {:href "#" :onClick #(submit-query app %)}
