@@ -1,6 +1,7 @@
 (ns fda-events.core
   (:require [clojure.browser.repl :as repl]
             [rum]
+            [sablono.core :as sablono]
             [goog.net.XhrIo :as xhr]))
 
 ;; (repl/connect "http://localhost:9000/repl")
@@ -13,8 +14,9 @@
   (swap! app assoc :message "Submitted!")
   (xhr/send (str "https://api.fda.gov/drug/event.json?search=" (:query @app))
             (fn [xhr-event]
-              (.log js/console "Response:" (js/JSON.parse (.getResponseText (.-target xhr-event))))
-              (swap! app assoc :result (.getResponseText (.-target xhr-event)))))
+              (let [response (js/JSON.parse (.getResponseText (.-target xhr-event)))]
+                (.log js/console "Response:" response)
+                (swap! app assoc :result (get (js->clj response) "results")))))
   (.preventDefault event))
 
 (rum/defc input < rum/cursored rum/cursored-watch [ref attributes]
@@ -35,6 +37,26 @@
         {:href "#" :onClick #(submit-query app %)}
         "Search"]]]]]])
 
+(defn render-node [value]
+  (cond
+   (and (vector? value) (every? map? value))
+    (map-indexed #(apply js/TreeView #js {:nodeLabel (str "Array " %1)}
+                         (render-node %2))
+                 value)
+
+   (vector? value)
+   (map #(sablono/html [:div %]) value)
+
+   (map? value)
+   (map (fn [[k v]]
+           (if (or (map? v) (vector? v))
+             (apply js/TreeView #js {:nodeLabel (name k) :defaultCollapsed true} (render-node v))
+             (sablono/html [:div (str (name k) ": " (pr-str v))])))
+         value)
+
+    :else
+   [(pr-str value)]))
+
 (rum/defc fda-event-app < rum/reactive [app]
   (let [{:keys [message result]} (rum/react app)]
     [:div
@@ -43,6 +65,19 @@
        [:div.alert-box.radius.small-6.columns {:data-alert true} message])
      (query-form app)
      (when result
-       [:pre.panel.radius result])]))
+       [:pre.panel.radius (render-node result)])]))
 
 (rum/mount (fda-event-app app-state) (.getElementById js/document "app"))
+
+(comment
+  (js/setTimeout
+   (fn []
+     (swap! app-state assoc :result
+            [{:num 102
+              :string "blarg"
+              :foo [1 2 3]
+              :receiver {:org "name" :bar {:a 1}}}
+             {:num 103
+              :string "blurg"
+              :receiver {:org "foo"}}]))
+   1000))

@@ -2,10 +2,6 @@
 
 FIXME: Write a one-line description of your library/project.
 
-## Overview
-
-FIXME: Write a paragraph about the library/project and highlight its goals.
-
 ## Setup
 
 First-time Clojurescript developers, add the following to your bash .profile:
@@ -32,15 +28,17 @@ To get source map support in the Node REPL:
 Clean project specific out:
 
     lein clean
-     
+
 Optimized builds:
 
-    lein cljsbuild once release     
+    lein cljsbuild once release
 
 For more info on Cljs compilation, read [Waitin'](http://swannodette.github.io/2014/12/22/waitin/).
 
-## License
+## For Developers
 
-Copyright © 2014 FIXME
+To install/upgrade react-treeview:
 
-Distributed under the Eclipse Public License either version 1.0 or (at your option) any later version.
+  bower install react-treeview
+
+Make sure react version used by react-treeview is compatible with one used by rum
