@@ -10,16 +10,21 @@
 (enable-console-print!)
 
 (def app-state (atom {:query ""}))
+(def query-history (atom {}))
 
 (defn fetch-query! [app query-map]
   (swap! app assoc :message (str "Submitted: " query-map))
   (let [url (str "https://api.fda.gov/drug/event.json?"
                  (cstr/join "&" (map (fn [[k v]] (str (name k) "=" v)) query-map)))]
-    (xhr/send url
-            (fn [xhr-event]
-              (let [response (js/JSON.parse (.getResponseText (.-target xhr-event)))]
-                (.log js/console (str "Response for " url ":") response)
-                (swap! app assoc :result (js->clj response)))))))
+    (if-let [history-result (get @query-history query-map)]
+      (swap! app assoc :result history-result)
+      (xhr/send url
+                (fn [xhr-event]
+                  (let [response (js/JSON.parse (.getResponseText (.-target xhr-event)))]
+                    (.log js/console (str "Response for " url ":") response)
+                    (swap! app assoc :result (js->clj response))
+                    ;; Should pass query-history in as arg
+                    (swap! query-history assoc query-map (js->clj response))))))))
 
 (defn submit-query [app event]
   (fetch-query! app {:search (:query @app)})
@@ -77,17 +82,31 @@
     :else
    [(pr-str value)]))
 
+(defn history-query [app query-map event]
+  (fetch-query! app query-map)
+  (.preventDefault event))
+
 (rum/defc fda-event-app < rum/reactive [app]
   (let [{:keys [message result]} (rum/react app)]
     [:div
-     [:h2 "Search FDA Events!"]
-     (when message
-       [:div.alert-box.radius.small-6.columns {:data-alert true} message])
-     (query-form app)
-     (when result
-       [:pre.panel.radius
-        [:div (str "Count: " (get-in result ["meta" "results" "total"]))]
-        (render-node app (get result "results") [])])]))
+     [:.row
+      [:h2 "Search FDA Events!"]
+      (when message
+        [:div.alert-box.radius.small-6.columns {:data-alert true} message])
+      (query-form app)]
+     [:.row
+      [:.large-9.columns
+       (when result [:h5 "Results"])
+       (when result
+         [:pre.panel.radius
+          [:div (str "Count: " (get-in result ["meta" "results" "total"]))]
+          (render-node app (get result "results") [])])]
+      (when (seq @query-history)
+        [:aside.large-3.columns
+         [:h5 "History"]
+         [:ul.panel.side-nav
+          (map #(vector :li [:a {:href "#" :onClick (partial history-query app (key %))} (pr-str (key %))])
+               @query-history)]])]]))
 
 (rum/mount (fda-event-app app-state) (.getElementById js/document "app"))
 
