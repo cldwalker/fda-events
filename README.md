@@ -1,21 +1,26 @@
-# fda-events
+## Status
 
-FIXME: Write a one-line description of your library/project.
+Status: unmaintained
+
+## Description
+
+This is an exploratory single page app to the [FDA's drug adverse event API](https://open.fda.gov/drug/event/) using reactjs and [rum](https://github.com/tonsky/rum). Currently it allows for basic querying and contextual navigation of any node in the returned response (counts on the current field or filtering by the current field and its value). Api results are cached and can be navigated locally w/ a query history sidebar.
+
 
 ## Setup
 
-First-time Clojurescript developers, add the following to your bash .profile:
+To compile the dev clojurescript:
 
-    export LEIN_FAST_TRAMPOLINE=y
-    alias cljsbuild="lein trampoline cljsbuild $@"
+    lein cljsbuild once dev
+
+View it locally with: `open index.html`
+
+
+## Developing
 
 To avoid compiling ClojureScript for each build, AOT Clojurescript locally in your project with the following:
 
     ./scripts/compile_cljsc
-
-Subsequent dev builds can use:
-
-    lein cljsbuild auto dev
 
 To start a Node REPL (requires rlwrap):
 
@@ -33,9 +38,7 @@ Optimized builds:
 
     lein cljsbuild once release
 
-For more info on Cljs compilation, read [Waitin'](http://swannodette.github.io/2014/12/22/waitin/).
-
-## For Developers
+## Maintenance
 
 To install/upgrade react-treeview:
 

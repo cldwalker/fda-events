@@ -29,7 +29,7 @@
               :source-paths ["src"]
               :compiler {
                 :main fda-events.core
-                :output-to "out-adv/fda_events.min.js"
+                :output-to "out/fda_events.js"
                 :output-dir "out-adv"
                 :optimizations :advanced
                 :pretty-print false}}]})
