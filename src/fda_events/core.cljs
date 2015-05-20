@@ -12,22 +12,34 @@
 (def app-state (atom {:query ""}))
 (def query-history (atom {}))
 
-(defn fetch-query! [app query-map]
-  (swap! app assoc :message (str "Submitted: " query-map))
-  (let [url (str "https://api.fda.gov/drug/event.json?"
-                 (cstr/join "&" (map (fn [[k v]] (str (name k) "=" v)) query-map)))]
-    (if-let [history-result (get @query-history query-map)]
-      (swap! app assoc :result history-result)
-      (xhr/send url
-                (fn [xhr-event]
-                  (let [response (js/JSON.parse (.getResponseText (.-target xhr-event)))]
-                    (.log js/console (str "Response for " url ":") response)
-                    (swap! app assoc :result (js->clj response))
-                    ;; Should pass query-history in as arg
-                    (swap! query-history assoc query-map (js->clj response))))))))
+(defn fetch-query!
+  ([app query-map]
+   (fetch-query! app query-map (fn [resp]
+                                 (swap! app assoc :result
+                                        {:result (get resp "results")
+                                         :count (get-in resp ["meta" "results" "total"])}))))
+  ([app query-map cb]
+   (swap! app assoc :message (str "Submitted: " query-map))
+   (let [url (str "https://api.fda.gov/drug/event.json?"
+                  (cstr/join "&" (map (fn [[k v]] (str (name k) "=" v)) query-map)))]
+     (if-let [history-result (get @query-history query-map)]
+       (cb history-result)
+       (xhr/send url
+                 (fn [xhr-event]
+                   (let [raw-response (js/JSON.parse (.getResponseText (.-target xhr-event)))
+                         resp (js->clj raw-response)]
+                     (.log js/console (str "Response for " url ":") raw-response)
+                     (cb resp)
+                     ;; Should pass query-history in as arg
+                     (swap! query-history assoc query-map resp))))))))
 
 (defn submit-query [app event]
   (fetch-query! app {:search (:query @app)})
+  (when (re-find #"extras" js/window.location.search)
+    (fetch-query! app
+                  {:search (:query @app) :count "patient.reaction.reactionmeddrapt.exact"}
+                  (fn [resp]
+                    (swap! app assoc :reactions (get resp "results")))))
   (.preventDefault event))
 
 (rum/defc input < rum/cursored rum/cursored-watch [ref attributes]
@@ -87,20 +99,28 @@
   (.preventDefault event))
 
 (rum/defc fda-event-app < rum/reactive [app]
-  (let [{:keys [message result]} (rum/react app)]
+  (let [{:keys [message result reactions]} (rum/react app)]
     [:div
      [:.row
       [:h2 "Search FDA Events!"]
       (when message
-        [:div.alert-box.radius.small-6.columns {:data-alert true} message])
+        [:div.alert-box.radius.small-6.columns.success {:data-alert true} message])
       (query-form app)]
      [:.row
       [:.large-9.columns
        (when result [:h5 "Results"])
        (when result
          [:pre.panel.radius
-          [:div (str "Count: " (get-in result ["meta" "results" "total"]))]
-          (render-node app (get result "results") [])])]
+          [:div (str "Count: " (:count result))]
+          (render-node app (:result result) [])])
+       (when (seq reactions)
+         [:div
+          [:h5 "Reactions"]
+          (let [max-count (apply max (map #(get % "count") reactions))]
+            (map #(vector :div
+                          [:meter {:value (get % "count") :max max-count}]
+                          (str " " (get % "count") " - " (get % "term")))
+                 reactions))])]
       (when (seq @query-history)
         [:aside.large-3.columns
          [:h5 "History"]
@@ -111,6 +131,10 @@
 (rum/mount (fda-event-app app-state) (.getElementById js/document "app"))
 
 (comment
+  (add-watch app-state :watch-changes
+             (fn [k a old new]
+               (prn "APP update" (keys new) new)))
+
   (js/setTimeout
    (fn []
      (swap! app-state assoc :result
